@@ -2,10 +2,11 @@
 
 学习 vue 的底层、设计与实现
 
+仓库地址：[https://github.com/Juns-g/vue-insights](https://github.com/Juns-g/vue-insights)
+
 参考资料：
 
-- [深入浅出 Vue.js
-  ](https://book.douban.com/subject/32581281/)
+- [深入浅出 Vue.js](https://book.douban.com/subject/32581281/)
 - [Vue2 源码](https://github.com/vuejs/vue)
 
 ## 响应式系统
