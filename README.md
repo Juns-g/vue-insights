@@ -287,3 +287,268 @@ Object 是通过 setter 来追踪的，数据发生变化一定会触发 setter
 #### 拦截器
 
 拦截器其实就是一个和`Array.prototype`一样的 Object，里面包含的属性和方法都一样，但是这些方法都是被重写过的，重写的方法会在执行原生方法之前，先通知依赖进行更新。
+
+通过整理可以得知，Array 原型中可以改变数组自身内容的方法有 7 个，下面写出代码
+
+```js
+const arrayProto = Array.prototype
+export const arrayMethods = Object.create(arrayProto) // 继承原型上的方法
+
+const methodsToPatch = [
+  'push',
+  'pop',
+  'shift',
+  'unshift',
+  'splice',
+  'sort',
+  'reverse',
+]
+
+methodsToPatch.forEach(method => {
+  // 缓存原始方法
+  const original = arrayProto[method]
+  Object.defineProperty(arrayMethods, method, {
+    value: function mutator(...args) {
+      // 待处理
+      return original.apply(this, args)
+    },
+    enumerable: false,
+    writable: true,
+    configurable: true,
+  })
+})
+```
+
+在上面的代码中我们创建了一个变量`arrayMethods`，它继承了`Array.prototype`，然后遍历`methodsToPatch`，把这些方法都重写了，重写的方法会在执行原生方法之前，先通知依赖进行更新。
+
+#### 使用拦截器来覆盖 Array 原型
+
+想要让拦截器生效，就需要用它去覆盖 Array 原型上的方法，这样当用户调用这些方法时，就会触发拦截器的方法，从而达到侦测变化的目的。但是我们不能直接覆盖，这样会污染全局的 Array 原型，所以需要创建一个新的数组原型，然后把拦截器的方法都拷贝到新的数组原型上，然后把新的数组原型赋值给数组的原型。其实也就是说希望拦截器只覆盖响应式数据的原型。
+
+```js
+export class Observer {
+  constructor(value) {
+    this.value = value
+    if (isArray(value)) {
+      value.__proto__ = arrayMethods
+    } else {
+      this.walk(value)
+    }
+  }
+}
+```
+
+#### 将拦截器方法挂载到数组的属性上
+
+ES6 之前这样的方法并不是标准，所以需要处理不能使用`__proto__`的情况。
+
+Vue 的做法也很简单，就是把拦截器的方法挂载到数组的属性上，然后在拦截器的方法中调用数组的原生方法。
+
+```js
+import { isArray } from '../utils/isUtils.js'
+import { arrayMethods } from './arrayMethods.js'
+
+const hasProto = '__proto__' in {}
+const arrayKeys = Object.getOwnPropertyNames(arrayMethods)
+
+export class Observer {
+  constructor(value) {
+    this.value = value
+    if (isArray(value)) {
+      const augment = hasProto ? protoAugment : copyAugment
+      augment(value, arrayMethods, arrayKeys)
+    } else {
+      this.walk(value)
+    }
+  }
+}
+
+function protoAugment(target, src, keys) {
+  target.__proto__ = src
+}
+
+function copyAugment(target, src, keys) {
+  for (let i = 0; i < keys.length; i++) {
+    const key = keys[i]
+    def(target, key, src[key])
+  }
+}
+```
+
+#### 如何收集依赖
+
+Array 在 getter 中收集依赖，在拦截器中触发依赖
+
+#### 依赖列表存在哪
+
+存在 Observer 中，因为他必须在 getter 和拦截器中都可以访问到。
+
+```js
+function defineReactive(data, key, val) {
+  let childOb = observe(val)
+  const dep = new Dep()
+  Object.defineProperty(data, key, {
+    enumerable: true,
+    configurable: true,
+    get() {
+      dep.depend()
+      if (childOb) {
+        childOb.dep.depend()
+      }
+      return val
+    },
+    set(newVal) {
+      if (val === newVal) {
+        return
+      }
+      val = newVal
+      dep.notify()
+    },
+  })
+}
+
+// 尝试为value创建一个Observer实例
+// 如果创建成功，直接返回新创建的Observer实例
+// 如果value已经存在一个Observer实例，则直接返回它
+function observe(value, asRootData) {
+  if (!isObject(value)) {
+    return
+  }
+  let ob
+  if (hasOwn(value, '__ob__') && value.__ob__ instanceof Observer) {
+    ob = value.__ob__
+  } else {
+    ob = new Observer(value)
+  }
+  return ob
+}
+```
+
+我们通过`observe`函数获取到了数组的 Observer 实例`childOb`。
+
+#### 在拦截器中获取 Observer 实例
+
+因为拦截器是对原型的封装，所以可以在拦截器中访问到 this，而 dep 保存在 Observer 中，所以可以通过 this 访问到 dep
+
+```js
+export class Observer {
+  constructor(value) {
+    this.value = value
+    this.dep = new Dep()
+    def(value, '__ob__', this)
+    if (isArray(value)) {
+      const augment = hasProto ? protoAugment : copyAugment
+      augment(value, arrayMethods, arrayKeys)
+    } else {
+      this.walk(value)
+    }
+  }
+}
+
+function def(obj, key, val, enumerable) {
+  Object.defineProperty(obj, key, {
+    value: val,
+    enumerable: !!enumerable,
+    writable: true,
+    configurable: true,
+  })
+}
+```
+
+上面的代码在响应式数据上定义了`__ob__`属性，值是 Observer 实例，这样就可以在拦截器中访问到 Observer 实例了
+
+此外，我们也可以通过这个数据是否拥有`__ob__`属性来判断这个数据是否是响应式数据
+
+#### 向数组的依赖发送通知
+
+当侦测到数组变化时，会向依赖发送通知。
+
+```js
+methodsToPatch.forEach(method => {
+  // 缓存原始方法
+  const original = arrayProto[method]
+  def(arrayMethods, method, function mutator(...args) {
+    const result = original.apply(this, args)
+    const ob = this.__ob__
+    // todo
+    ob.dep.notify() // 向依赖发送消息
+    return result
+  })
+})
+```
+
+#### 侦测数组中元素的变化
+
+需要在 Observer 中新增处理来让 Array 也可以转成响应式
+
+```js
+export class Observer {
+  constructor(value) {
+    this.value = value
+    this.dep = new Dep()
+    def(value, '__ob__', this)
+    if (isArray(value)) {
+      const augment = hasProto ? protoAugment : copyAugment
+      augment(value, arrayMethods, arrayKeys)
+      this.observerArray(value)
+    } else {
+      this.walk(value)
+    }
+  }
+  observerArray(items) {
+    for (let i = 0; i < items.length; i++) {
+      observe(items[i])
+    }
+  }
+}
+```
+
+#### 侦测新增元素的变化
+
+数组的有些方法是可以新增数组内容的，新增的内容也需要转换成响应式，所以需要在拦截器中处理
+
+```js
+methodsToPatch.forEach(method => {
+  // 缓存原始方法
+  const original = arrayProto[method]
+  def(arrayMethods, method, function mutator(...args) {
+    const result = original.apply(this, args)
+    const ob = this.__ob__
+    let inserted
+    switch (method) {
+      case 'push':
+      case 'unshift':
+        inserted = args
+        break
+      case 'splice':
+        inserted = args.slice(2)
+        break
+    }
+    if (inserted) {
+      // 对新增的元素进行观测
+      ob.observerArray(inserted)
+    }
+    ob.dep.notify() // 向依赖发送消息
+    return result
+  })
+})
+```
+
+#### 问题
+
+Vue 对于 Array 的变化侦测是通过拦截原型的方式来实现的，但是这种实现方式会导致无法拦截到一些操作，比如：
+
+```js
+this.list[0] = 2
+// 修改数组的第一个元素的值，无法侦测到变化
+this.list.length = 0
+// 清空数组的操作也无法侦测到
+```
+
+在 Vue3 中可以通过 Proxy 来解决这个问题
+
+#### 总结
+
+Array 追踪变化的方式和 Object 不一样，因为他通过方法来改变内容，所以我们通过创建拦截器来覆盖数组原型的方式去追踪变化。
+
+为了不污染全局的数组原型，我们创建了一个新的数组原型，然后把拦截器的方法都拷贝到新的数组原型上，然后把新的数组原型赋值给数组的原型。
