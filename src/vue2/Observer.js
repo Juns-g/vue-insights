@@ -1,6 +1,6 @@
 import Dep from './Dep.js'
 import { def } from './def.js'
-import { isArray } from '../utils/isUtils.js'
+import { isArray, isObject, hasOwn } from '../utils/index.js'
 import { arrayMethods } from './arrayMethods.js'
 
 const hasProto = '__proto__' in {}

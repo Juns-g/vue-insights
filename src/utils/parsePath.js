@@ -14,7 +14,7 @@ export const unicodeRegExp =
  * @return {*}
  */
 const bailRE = new RegExp(`[^${unicodeRegExp.source}.$_\\d]`)
-export function parsePath(path: string): any {
+export function parsePath(path) {
   if (bailRE.test(path)) {
     return
   }
