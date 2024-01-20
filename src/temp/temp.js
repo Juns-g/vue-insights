@@ -1,22 +1,18 @@
-export class Observer {
-  constructor(value) {
-    this.value = value
-    this.dep = new Dep()
-    def(value, '__ob__', this)
-    if (isArray(value)) {
-      const augment = hasProto ? protoAugment : copyAugment
-      augment(value, arrayMethods, arrayKeys)
-    } else {
-      this.walk(value)
+import { parsePath } from '../utils/index.js'
+
+export default class Watcher {
+  constructor(vm, expOrFn, cb) {
+    this.vm = vm
+    this.deps = []
+    this.depIds = new Set()
+    // ...
+  }
+  addDep(dep) {
+    const id = dep.id
+    if (!this.depIds.has(id)) {
+      this.depIds.add(id)
+      this.deps.push(dep)
+      dep.addSub(this)
     }
   }
-}
-
-function def(obj, key, val, enumerable) {
-  Object.defineProperty(obj, key, {
-    value: val,
-    enumerable: !!enumerable,
-    writable: true,
-    configurable: true,
-  })
 }

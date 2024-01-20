@@ -552,3 +552,91 @@ this.list.length = 0
 Array 追踪变化的方式和 Object 不一样，因为他通过方法来改变内容，所以我们通过创建拦截器来覆盖数组原型的方式去追踪变化。
 
 为了不污染全局的数组原型，我们创建了一个新的数组原型，然后把拦截器的方法都拷贝到新的数组原型上，然后把新的数组原型赋值给数组的原型。
+
+### 变化侦测相关的 API 实现原理
+
+#### vm.$watch
+
+##### 用法
+
+```js
+vm.$watch(expOrFn, callback, [options])
+```
+
+参数：
+
+- `{string | Function} expOrFn`
+- `{Function | Object} callback`
+- `{Object} [options]`
+  - `{boolean} deep`
+  - `{boolean} immediate`
+
+返回值：{Function} unwatch
+
+用法：用于观察一个表达式或 computed 函数在 Vue.js 实例上的变化。回调函数得到的参数为新值和旧值。表达式只接受监督的键路径。对于更复杂的表达式，用一个函数取代。
+
+**deep**：为了发现对象内部值的变化，可以在选项参数中指定 deep: true。注意监听数组的变动不需要这么做。
+
+**immediate**：在选项参数中指定 immediate: true 将立即以表达式的当前值触发回调。
+
+##### 内部原理
+
+实际上是对 Watcher 的一种封装，但是多了一些参数的处理
+
+```js
+export function stateMixin(Vue) {
+  Vue.prototype.$watch = function (expOrFn, cb, options) {
+    const vm = this
+    options = options || {}
+    const watcher = new Watcher(vm, expOrFn, cb, options)
+    if (options.immediate) {
+      cb.call(vm, watcher.value)
+    }
+    return function unwatchFn() {
+      watcher.teardown()
+    }
+  }
+}
+```
+
+同时 Watcher 也需要做一些更改
+
+```js
+class Watcher {
+  constructor(vm, expOrFn, cb) {
+    this.vm = vm
+    if (typeof expOrFn === 'function') {
+      this.getter = expOrFn
+    } else {
+      this.getter = parsePath(expOrFn)
+    }
+    this.cb = cb
+    this.value = this.get()
+  }
+}
+```
+
+teardown()方法待添加。
+
+需要在 Watcher 中添加 addDep 方法，作用是在 Watcher 中记录自己订阅过哪些 Dep
+
+```js
+import { parsePath } from '../utils/index.js'
+
+export default class Watcher {
+  constructor(vm, expOrFn, cb) {
+    this.vm = vm
+    this.deps = []
+    this.depIds = new Set()
+    // ...
+  }
+  addDep(dep) {
+    const id = dep.id
+    if (!this.depIds.has(id)) {
+      this.depIds.add(id)
+      this.deps.push(dep)
+      dep.addSub(this)
+    }
+  }
+}
+```
