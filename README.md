@@ -642,3 +642,76 @@ export default class Watcher {
   }
 }
 ```
+
+# Vue3
+
+## 响应式系统
+
+> 这里打算换一种形式，v2的响应式相当于是直接抄的书，v3这个打算仅仅是整理一下思路
+
+### 响应式数据和副作用函数
+
+什么是副作用函数？就是指会产生副作用的函数，那么什么又是副作用呢，比如：
+
+```js
+function effect(){
+  doucment.body.innerText = 'hello'
+}
+```
+
+他被执行时会改变body内的文本，但是呢，除了他之外的任何函数都可以读取/设置body的文本内容。所以说，副作用函数的执行会直接/间接影响其他函数的执行。
+
+> 纯函数就是没有副作用的函数（相同的输入，总是会的到相同的输出，并且在执行过程中没有任何副作用）
+
+那么接下来理解响应式数据，假设在副作用函数中读取了一个对象的属性
+
+```js
+const obj = { text: 'hello' }
+function effect(){
+  doucment.body.innerText = obj.text
+}
+```
+
+那么其实显而易见，我们期望的是：当修改obj.text的值的时候，这个副作用被自动触发
+
+### 响应式数据的基本实现
+
+可以观察发现：
+
+- 当副作用执行时，会**读取**obj.text
+- 当修改obj.text的值是，会触发**设置**
+
+所以目的就到了拦截一个对象的**读取**和**设置**操作，不过副作用不一定只有一个，这个时候就需要一个容器来存副作用，所以就变成了：
+
+- **读取**的时候，把副作用存到桶🪣里
+- **设置**的时候，从桶🪣里取出副作用并执行
+
+回到正轨，目的是拦截一个对象属性的**读取**和**设置**操作，在vue2的时候，当时只有`Object.defineProperty()`这个api，不过现在有了`Proxy`了🤣
+
+简单的实现：
+
+```js
+const dep = new Set()
+
+const data = { text: 'hello' }
+const effect = () => {
+  console.log('effect')
+}
+
+const proxyData = new Proxy(data, {
+  get(target, key) {
+    dep.add(effect)
+    return Reflect.get(...arguments)
+  },
+  set(target, key, value) {
+    Reflect.set(...arguments)
+    dep.forEach(effect => effect())
+  },
+})
+```
+
+### 设计一个完善的响应式系统
+
+上文的实现是很基础的，考虑的也不够充分，缺少很多细节，这里来补全他们。
+
+具体的细节直接看书理解吧，这里简单整理就可以了
