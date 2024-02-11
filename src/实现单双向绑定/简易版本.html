@@ -1,0 +1,40 @@
+<div id="app">
+  <input
+    type="text"
+    id="input"
+    v-model="inputVal"
+  />
+  <h1>{{ inputVal }}</h1>
+  <button>+1</button>
+</div>
+
+<script>
+  const app = document.querySelector('#app')
+
+  const input = app.querySelector('#input')
+  const h1 = app.querySelector('h1')
+  const button = app.querySelector('button')
+
+  let inputVal = 'hello world'
+  h1.textContent = inputVal
+  input.value = inputVal
+
+  Object.defineProperty(window, 'inputVal', {
+    get() {
+      return inputVal
+    },
+    set(val) {
+      inputVal = val
+      input.value = val
+      h1.textContent = val
+    },
+  })
+
+  input.addEventListener('input', () => {
+    window.inputVal = input.value
+  })
+
+  button.addEventListener('click', () => {
+    window.inputVal = window.inputVal + '1'
+  })
+</script>

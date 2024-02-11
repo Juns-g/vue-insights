@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0"
+    />
+    <title>实现单双向绑定</title>
+  </head>
+  <body>
+    <div id="app">
+      <input
+        class="input"
+        type="text"
+        v-model="inputVal"
+      />
+      <h1>{{ inputVal }}</h1>
+    </div>
+  </body>
+  <script src="./index.js"></script>
+  <script>
+    const app = new Vue({
+      el: '#app',
+      data: {
+        inputVal: 'hello world',
+      },
+    })
+  </script>
+</html>
