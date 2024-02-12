@@ -1,11 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
   <head>
-    <meta charset="UTF-8" />
-    <meta
-      name="viewport"
-      content="width=device-width, initial-scale=1.0"
-    />
     <title>实现单双向绑定</title>
   </head>
   <body>
@@ -16,14 +11,28 @@
         v-model="inputVal"
       />
       <h1>{{ inputVal }}</h1>
+      <button @click="addOne">+1</button>
+      <input v-bind:placeholder="inputVal" />
     </div>
   </body>
+  <style>
+    #app {
+      margin-left: 400px;
+      margin-top: 200px;
+      height: 300px;
+    }
+  </style>
   <script src="./index.js"></script>
   <script>
     const app = new Vue({
       el: '#app',
       data: {
         inputVal: 'hello world',
+      },
+      methods: {
+        addOne() {
+          this.$data.inputVal += '1'
+        },
       },
     })
   </script>

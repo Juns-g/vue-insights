@@ -1,17 +1,8 @@
-const dep = new Set()
-
-const data = { text: 'hello' }
-const effect = () => {
-  console.log('effect')
+class Vue {
+  constructor(options) {
+    this.$options = options
+    this.$data = options.data
+    // 将data转换成响应式数据
+    // 编译渲染试图
+  }
 }
-
-const proxyData = new Proxy(data, {
-  get(target, key) {
-    dep.add(effect)
-    return Reflect.get(...arguments)
-  },
-  set(target, key, value) {
-    Reflect.set(...arguments)
-    dep.forEach(effect => effect())
-  },
-})

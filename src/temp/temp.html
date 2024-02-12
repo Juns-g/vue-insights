@@ -1,0 +1,28 @@
+<input />
+<h1>inputVal</h1>
+<script>
+  // 视图更新函数
+  const input = document.querySelector('input')
+  const h1 = document.querySelector('h1')
+  function updateView(val) {
+    h1.textContent = val
+    input.value = val
+  }
+
+  let inputVal = 'hello vue'
+  updateView(inputVal) // 首次更新
+
+  Object.defineProperty(window, 'inputVal', {
+    get() {
+      return inputVal
+    },
+    set(newVal) {
+      inputVal = newVal
+      updateView(inputVal) // 数据更新时更新视图
+    },
+  })
+
+  input.addEventListener('input', event => {
+    window.inputVal = event.target.value
+  })
+</script>

@@ -3,6 +3,7 @@ class Vue {
     console.log('🚀 ~ options:', options)
     this.$options = options
     this.$data = options.data
+    this.$methods = options.methods
     observe(this.$data)
     new Compile(options.el, this)
   }
@@ -18,134 +19,134 @@ function observe(data) {
 }
 
 function defineReactive(obj, key, val) {
-  observe(val)
+  observe(val) // 递归所有属性的值
   const dep = new Dep()
   Object.defineProperty(obj, key, {
     get() {
-      console.log('get', obj, key, val)
       dep.depend()
-      console.log('🚀 ~ dep.subs.length:', dep.subs.length)
+      console.log('🚀 ~ dep:', dep)
       return val
     },
     set(newVal) {
-      if (val !== newVal) {
-        observe(newVal)
-        console.log('set', obj, key, newVal)
-        val = newVal
-        dep.notify()
-      }
+      if (val === newVal) return val
+      val = newVal
+      dep.notify()
     },
   })
 }
 
-class Compile {
-  constructor(el, vm) {
-    this.$vm = vm
-    const dom = document.querySelector(el)
-    this.compile(dom)
+// 存放依赖
+class Dep {
+  constructor() {
+    this.subs = []
   }
-  compile(node) {
-    const childNodes = node.childNodes
-    childNodes.forEach(node => {
-      console.dir(node)
-      // 插值表达式
-      if (this.isInter(node)) {
-        // const key = this.getInter(node)
-        // this.compileText(node, key)
-        this.getInter(node)
-      } else {
-        const attrs = node.attributes
-        if (attrs) {
-          Array.from(attrs).forEach(attr => {
-            const { name, value } = attr
-            if (name.startsWith('v-')) {
-              const type = name.substring(2)
-              this[type](node, value)
-              node.value = this.$vm.$data[value]
-            }
-          })
-        }
-        // 递归
-        if (node.childNodes.length > 0) {
-          this.compile(node)
-        }
-      }
+  notify() {
+    this.subs.forEach(effect => {
+      effect.update()
     })
   }
-  compileText(node, key) {
-    node.textContent = this.$vm.$data[key]
-  }
-  isInter(node) {
-    const reg = /\{\{(.*)\}\}/
-    return reg.test(node.textContent)
-  }
-
-  getInter(node) {
-    if (!this.isInter(node)) throw new Error('node内部不是一个插值表达式')
-    const reg = /\{\{(.*)\}\}/
-    const exp = node.textContent.replace(reg, '$1').trim()
-    const watcher = new Watcher(this.$vm, exp, val => {
-      console.log('🚀 ~ val:', val)
-      node.textContent = val
-    })
-    return exp
-  }
-  // 双向绑定 v-model
-  model(node, exp) {
-    console.log('🚀 ~ v-model exp:', exp)
-    // 这里就只考虑 input 了
-    const watcher = new Watcher(this.$vm, exp, val => {
-      node.value = val
-    })
-
-    node.addEventListener('input', () => {
-      this.$vm.$data[exp] = node.value
-    })
+  depend() {
+    if (!window.nowWatcher || this.subs.includes(window.nowWatcher)) {
+      return
+    }
+    this.subs.push(window.nowWatcher)
   }
 }
 
 class Watcher {
   constructor(vm, exp, callback) {
     this.cb = callback
-    this.$vm = vm
-    this.$exp = exp
+    this.vm = vm
+    this.exp = exp
     this.value = this.get()
   }
   get() {
     window.nowWatcher = this
-    let val = this.$vm.$data[this.$exp]
+    const val = this.vm.$data[this.exp]
     window.nowWatcher = null
     return val
   }
   update() {
-    console.log('🚀 ~ update:')
     const oldVal = this.value
     const newVal = this.get()
-    if (oldVal !== newVal) {
-      this.cb.call(this.$vm, newVal, oldVal)
-    }
+    this.cb.call(this.vm, newVal, oldVal)
   }
 }
 
-class Dep {
-  constructor() {
-    this.subs = []
+class Compile {
+  constructor(el, vm) {
+    this.vm = vm
+    const dom = document.querySelector(el)
+    this.compile(dom)
   }
-  notify() {
-    console.log('🚀 ~ notify:')
-    this.subs.forEach(sub => {
-      console.log('🚀 ~ sub:')
-      sub.update()
+  compile(node) {
+    const childNodes = node.childNodes
+    childNodes.forEach(cNode => {
+      console.dir(cNode)
+      //  {{ }}
+      if (this.isInter(cNode)) {
+        this.compileText(cNode)
+      } else {
+        if (!cNode.attributes) return
+        const attrs = cNode.attributes
+        Array.from(attrs).forEach(attr => {
+          const { name: attrName, value: exp } = attr
+          if (attrName.startsWith('v-bind:')) {
+            const attrValue = attrName.substring(7)
+            this.vBind(cNode, attrValue, exp)
+            return
+          }
+          if (attrName.startsWith('v-')) {
+            const type = attrName.substring(2)
+            this[type](cNode, exp)
+            return
+          }
+          if (attrName.startsWith('@')) {
+            const type = attrName.substring(1)
+            this[type](cNode, exp)
+          }
+        })
+      }
     })
   }
-  addSub(sub) {
-    console.log('🚀 ~ addSub:', sub)
-    this.subs.push(sub)
+  isInter(node) {
+    const reg = /\{\{(.*)\}\}/
+    return reg.test(node.textContent)
   }
-  depend() {
-    console.log('🚀 ~ depend, window.nowWatcher:', window.nowWatcher)
-    if (window.nowWatcher) {
-      this.addSub(window.nowWatcher)
+  getInter(node) {
+    const reg = /\{\{(.*)\}\}/
+    const exp = node.textContent.replace(reg, '$1').trim()
+    return exp
+  }
+  compileText(node) {
+    const exp = this.getInter(node)
+    node.textContent = this.vm.$data[exp]
+    new Watcher(this.vm, exp, val => {
+      node.textContent = val
+    })
+  }
+  model(node, exp) {
+    console.log('🚀 ~ model:')
+    node.value = this.vm.$data[exp]
+    new Watcher(this.vm, exp, val => {
+      node.value = val
+    })
+    node.addEventListener('input', event => {
+      this.vm.$data[exp] = event.target.value
+    })
+  }
+  click(node, exp) {
+    console.log('🚀 ~ exp:', exp)
+    const fn = this.vm.$methods[exp]
+    node.onclick = () => {
+      fn.call(this.vm)
     }
+  }
+  vBind(node, attrValue, exp) {
+    console.dir(node)
+    node[attrValue] = this.vm.$data[exp]
+    new Watcher(this.vm, exp, val => {
+      node[attrValue] = val
+    })
   }
 }
